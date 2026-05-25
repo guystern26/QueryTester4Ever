@@ -1,0 +1,29 @@
+[]
+access = read : [ * ], write : [ admin ]
+export = system
+
+[restmap]
+access = read : [ * ], write : [ admin ]
+export = system
+
+[kvstore/query_tester_config]
+access = read : [ admin ], write : [ admin ]
+
+[kvstore/query_tester_command_policy]
+access = read : [ admin ], write : [ admin ]
+
+[commands]
+access = read : [ * ], write : [ admin ]
+export = system
+
+[commands/aiguy]
+access = read : [ * ], write : [ admin ]
+export = system
+owner = nobody
+
+[searchbnf]
+access = read : [ * ], write : [ admin ]
+export = system
+
+[views/monitoring]
+access = read : [ admin, sc_admin ], write : [ admin ]

@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<view template="QueryTester:/templates/ide.html" type="html">
+    <label>SPL IDE</label>
+</view>

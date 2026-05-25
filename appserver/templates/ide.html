@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html class="no-js dark" lang="">
+    <head>
+        <meta charset="utf-8" />
+        <meta http-equiv="x-ua-compatible" content="ie=edge" />
+        <title>SPL IDE</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+
+        <link rel="stylesheet" type="text/css" href="${make_url('/static/app/QueryTester/pages/index-main.css')}" />
+    </head>
+
+    <body>
+        <div id="qt-loading" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0a1628;z-index:9999">
+            <div style="text-align:center">
+                <div style="width:32px;height:32px;border:3px solid #2a3a5c;border-top-color:#60A5FA;border-radius:50%;animation:qtspin .7s linear infinite;margin:0 auto"></div>
+                <div style="margin-top:12px;color:#94a3b8;font-size:13px;font-family:system-ui">Loading SPL IDE...</div>
+            </div>
+        </div>
+        <style>@keyframes qtspin{to{transform:rotate(360deg)}}</style>
+        <script src="${make_url('/config?autoload=1')}" crossorigin="use-credentials"></script>
+        <script src="${make_url('/static/js/i18n.js')}"></script>
+        <script src="${make_url('/i18ncatalog?autoload=1')}"></script>
+        <script>
+            __splunkd_partials__ = ${json_decode(splunkd)};
+        </script>
+
+        <% page_path = "/static/app/QueryTester/pages/" + page + ".js" %>
+
+        <script src="${make_url(page_path)}"></script>
+    </body>
+</html>

@@ -1,0 +1,637 @@
+<dashboard version="1.1" theme="dark">
+  <label>Query Tester — Monitoring</label>
+  <description>Operations dashboard — organized by section with clear titles.</description>
+
+  <fieldset submitButton="true" autoRun="true">
+    <input type="time" token="time_range" searchWhenChanged="true">
+      <label>Time Range</label>
+      <default>
+        <earliest>-7d@d</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+  </fieldset>
+
+  <!-- ╔═══════════════════════════════════════════════════════════════════════╗ -->
+  <!-- ║  SECTION 1: USER STATISTICS                                          ║ -->
+  <!-- ╚═══════════════════════════════════════════════════════════════════════╝ -->
+
+  <row><panel><html><h2 style="color:#93C5FD;margin:0;padding:4px 0">User Statistics</h2></html></panel></row>
+
+  <row>
+    <panel>
+      <title>Tests by Type</title>
+      <chart>
+        <search>
+          <query>| inputlookup saved_tests_lookup
+| eval type=case(validationType="ijump_alert","iJump", testType="query_only","Real Data", 1=1,"Synthetic")
+| stats count by type</query>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.fieldColors">{"Synthetic":"#60a5fa","Real Data":"#f59e0b","iJump":"#a78bfa"}</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Tests by App</title>
+      <chart>
+        <search>
+          <query>| inputlookup saved_tests_lookup
+| stats count by app
+| sort - count</query>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Pass / Fail Ratio</title>
+      <chart>
+        <search>
+          <query>index=_internal source="*query_tester.log" message="* completed:*status=*" earliest=$time_range.earliest$ latest=$time_range.latest$
+| rex field=message "status=(?&lt;s&gt;\w+)"
+| stats count by s
+| rename s as "Status"</query>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.fieldColors">{"pass":"#65a637","fail":"#d93f3c","error":"#f8be34","partial":"#f58f39"}</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Scheduled vs Manual</title>
+      <chart>
+        <search>
+          <query>index=_internal source="*query_tester.log" message="* completed:*status=*" earliest=$time_range.earliest$ latest=$time_range.latest$
+| eval trigger=if(module="scheduled_runner","Scheduled","Manual")
+| stats count by trigger</query>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.fieldColors">{"Scheduled":"#60a5fa","Manual":"#4ade80"}</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Runs by User</title>
+      <chart>
+        <search>
+          <query>| inputlookup test_run_history_lookup
+| stats count by ranBy
+| sort - count
+| head 15</query>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Completions Over Time (by Trigger + Status)</title>
+      <chart>
+        <search>
+          <query>index=_internal source="*query_tester.log" message="* completed:*status=*" earliest=$time_range.earliest$ latest=$time_range.latest$
+| rex field=message "status=(?&lt;s&gt;\w+)"
+| eval label=if(module="scheduled_runner","Sched","Manual")." ".s
+| timechart count by label</query>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Schedule Distribution</title>
+      <table>
+        <search>
+          <query>| inputlookup scheduled_tests_lookup
+| eval status=if(enabled="1" OR enabled="true" OR enabled="True","Enabled","Disabled")
+| eval lastRun=if(lastRunAt="","Never",strftime(strptime(lastRunAt,"%Y-%m-%dT%H:%M:%SZ"),"%m/%d %H:%M"))
+| eval result=case(lastRunStatus="pass","Pass",lastRunStatus="fail","Fail",lastRunStatus="error","Error",1=1,"—")
+| table testName app cronSchedule intervalKey status result lastRun
+| sort status testName
+| rename testName as "Test", cronSchedule as "Cron", intervalKey as "Interval", status as "State", result as "Last Result", lastRun as "Last Run"</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">10</option>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ╔═══════════════════════════════════════════════════════════════════════╗ -->
+  <!-- ║  SECTION 2: PERFORMANCE                                              ║ -->
+  <!-- ╚═══════════════════════════════════════════════════════════════════════╝ -->
+
+  <row><panel><html><h2 style="color:#93C5FD;margin:0;padding:4px 0">Performance</h2></html></panel></row>
+
+  <row>
+    <panel>
+      <title>Avg Duration (s)</title>
+      <single>
+        <search>
+          <query>index=_internal source="*query_tester.log" message="* completed:*duration=*" earliest=$time_range.earliest$ latest=$time_range.latest$
+| rex field=message "duration=(?&lt;d&gt;\d+)ms"
+| stats avg(d) as a
+| eval a=round(a/1000,1)</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="unit">s</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Max Duration (s)</title>
+      <single>
+        <search>
+          <query>index=_internal source="*query_tester.log" message="* completed:*duration=*" earliest=$time_range.earliest$ latest=$time_range.latest$
+| rex field=message "duration=(?&lt;d&gt;\d+)ms"
+| stats max(d) as m
+| eval m=round(m/1000,1)</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="unit">s</option>
+        <option name="colorBy">value</option>
+        <option name="useColors">1</option>
+        <option name="rangeColors">["0x65a637","0xf58f39","0xd93f3c"]</option>
+        <option name="rangeValues">[30,120]</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Total Runs</title>
+      <single>
+        <search>
+          <query>index=_internal source="*query_tester.log" message="* completed:*status=*" earliest=$time_range.earliest$ latest=$time_range.latest$
+| stats count</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Avg SPL Execution (s)</title>
+      <single>
+        <search>
+          <query>index=_internal source="*query_tester.log" module="spl.query_executor" message="Executed SPL in *" earliest=$time_range.earliest$ latest=$time_range.latest$
+| rex field=message "in (?&lt;d&gt;\d+) ms"
+| stats avg(d) as a
+| eval a=round(a/1000,1)</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="unit">s</option>
+      </single>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Duration Distribution</title>
+      <chart>
+        <search>
+          <query>index=_internal source="*query_tester.log" message="* completed:*duration=*" earliest=$time_range.earliest$ latest=$time_range.latest$
+| rex field=message "duration=(?&lt;d&gt;\d+)ms"
+| eval bucket=case(d&lt;2000,"&lt;2s",d&lt;10000,"2-10s",d&lt;30000,"10-30s",d&lt;60000,"30-60s",1=1,"60s+")
+| eval o=case(bucket="&lt;2s",1,bucket="2-10s",2,bucket="10-30s",3,bucket="30-60s",4,bucket="60s+",5)
+| stats count by bucket o
+| sort o
+| fields - o</query>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Slowest Runs (Top 10)</title>
+      <table>
+        <search>
+          <query>index=_internal source="*query_tester.log" message="* completed:*duration=*" earliest=$time_range.earliest$ latest=$time_range.latest$
+| rex field=message "(?:test\s+(?&lt;tid&gt;[\w-]+)\s+)?completed:?\s*status=(?&lt;s&gt;\w+),?\s*duration=(?&lt;d&gt;\d+)ms"
+| eval dur=round(d/1000,1)." s"
+| eval trigger=if(module="scheduled_runner","Sched","Manual")
+| sort - d
+| head 10
+| eval ts=strftime(_time,"%m/%d %H:%M")
+| table ts trigger tid s dur
+| rename ts as "Time", trigger as "Type", tid as "Test ID", s as "Status", dur as "Duration"</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">10</option>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ╔═══════════════════════════════════════════════════════════════════════╗ -->
+  <!-- ║  SECTION 3: INFRASTRUCTURE                                           ║ -->
+  <!-- ╚═══════════════════════════════════════════════════════════════════════╝ -->
+
+  <row><panel><html><h2 style="color:#93C5FD;margin:0;padding:4px 0">Infrastructure</h2></html></panel></row>
+
+  <row>
+    <panel>
+      <title>Saved Tests</title>
+      <single>
+        <search>
+          <query>| inputlookup saved_tests_lookup | stats count</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Scheduled Tests</title>
+      <single>
+        <search>
+          <query>| inputlookup scheduled_tests_lookup | stats count</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Run History Records</title>
+      <single>
+        <search>
+          <query>| inputlookup test_run_history_lookup | stats count</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Temp Index Events</title>
+      <single>
+        <search>
+          <query>| tstats count where index=temp_query_tester earliest=$time_range.earliest$ latest=$time_range.latest$</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Temp Lookups Active</title>
+      <single>
+        <search>
+          <query>| rest /servicesNS/nobody/QueryTester/storage/collections/config splunk_server=local
+| search title="temp_lookup_*" OR title="temp_cache_*"
+| stats count</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="colorBy">value</option>
+        <option name="useColors">1</option>
+        <option name="rangeColors">["0x65a637","0xf58f39","0xd93f3c"]</option>
+        <option name="rangeValues">[5,20]</option>
+      </single>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Orphaned Temp Lookups (not cleaned up)</title>
+      <table>
+        <search>
+          <query>| rest /servicesNS/nobody/QueryTester/storage/collections/config splunk_server=local
+| search title="temp_lookup_*" OR title="temp_cache_*"
+| eval age_min=round((now()-strptime(updated,"%Y-%m-%dT%H:%M:%S%z"))/60,0)
+| where age_min > 30
+| eval age=case(age_min&lt;60, age_min." min", age_min&lt;1440, round(age_min/60,1)." hrs", 1=1, round(age_min/1440,1)." days")
+| sort - age_min
+| table title age
+| rename title as "Collection Name", age as "Age (stale &gt;30min)"</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">10</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>HEC Indexing Activity</title>
+      <chart>
+        <search>
+          <query>index=_internal source="*query_tester.log" module="data.data_indexer" message="Indexed batch *" earliest=$time_range.earliest$ latest=$time_range.latest$
+| rex field=message "batch \d+-(?&lt;end&gt;\d+) \((?&lt;cnt&gt;\d+) events\)"
+| timechart sum(cnt) as "Events Indexed"</query>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.chart.nullValueMode">zero</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>SHC Dedup Health</title>
+      <chart>
+        <search>
+          <query>index=_internal source="*query_tester.log" module="scheduled_runner" (message="Skipping *" OR message="SHC stagger:*" OR message="Not the owner*") earliest=$time_range.earliest$ latest=$time_range.latest$
+| eval action=case(
+    like(message,"Skipping%dedup%") OR like(message,"Skipping%already ran%"),"Dedup skip",
+    like(message,"Skipping%already claimed%") OR like(message,"Skipping%another search head%"),"SHC host skip",
+    like(message,"Not the owner%"),"Owner mismatch",
+    like(message,"SHC stagger%"),"Stagger delay",
+    1=1,"Other")
+| timechart count by action</query>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ╔═══════════════════════════════════════════════════════════════════════╗ -->
+  <!-- ║  SECTION 4: ERRORS                                                   ║ -->
+  <!-- ╚═══════════════════════════════════════════════════════════════════════╝ -->
+
+  <row><panel><html><h2 style="color:#d93f3c;margin:0;padding:4px 0">Errors</h2></html></panel></row>
+
+  <row>
+    <panel>
+      <title>Errors</title>
+      <single>
+        <search>
+          <query>index=_internal source="*query_tester.log" log_level="ERROR" earliest=$time_range.earliest$ latest=$time_range.latest$
+| stats count</query>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="useColors">1</option>
+        <option name="rangeColors">["0x65a637","0xd93f3c"]</option>
+        <option name="rangeValues">[0]</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Warnings</title>
+      <single>
+        <search>
+          <query>index=_internal source="*query_tester.log" log_level="WARNING" earliest=$time_range.earliest$ latest=$time_range.latest$
+| stats count</query>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="useColors">1</option>
+        <option name="rangeColors">["0x65a637","0xf58f39"]</option>
+        <option name="rangeValues">[0]</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Missed Runs</title>
+      <single>
+        <search>
+          <query>index=_internal source="*query_tester.log" message="Missed run detected *" earliest=$time_range.earliest$ latest=$time_range.latest$
+| stats count</query>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="useColors">1</option>
+        <option name="rangeColors">["0x65a637","0xf58f39","0xd93f3c"]</option>
+        <option name="rangeValues">[5,20]</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <title>SPL Drift Detected</title>
+      <single>
+        <search>
+          <query>index=_internal source="*query_tester.log" message="SPL drift detected *" earliest=$time_range.earliest$ latest=$time_range.latest$
+| stats count</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Errors + Warnings by Module</title>
+      <chart>
+        <search>
+          <query>index=_internal source="*query_tester.log" (log_level="ERROR" OR log_level="WARNING") earliest=$time_range.earliest$ latest=$time_range.latest$
+| stats count by module log_level
+| sort - count
+| head 20</query>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.fieldColors">{"ERROR":"#d93f3c","WARNING":"#f58f39"}</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Top Error Messages</title>
+      <table>
+        <search>
+          <query>index=_internal source="*query_tester.log" log_level="ERROR" earliest=$time_range.earliest$ latest=$time_range.latest$
+| eval short_msg=if(len(message)>120, substr(message,1,120)."...", message)
+| stats count as "Count" latest(_time) as last by short_msg module
+| eval last=strftime(last,"%m/%d %H:%M")
+| sort - Count
+| head 10
+| rename short_msg as "Error", module as "Module", last as "Last Seen"</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">10</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Recent Errors</title>
+      <table>
+        <search>
+          <query>index=_internal source="*query_tester.log" log_level="ERROR" earliest=$time_range.earliest$ latest=$time_range.latest$
+| sort - _time
+| head 20
+| eval ts=strftime(_time,"%m/%d %H:%M:%S")
+| eval exc=if(isnotnull(exception), substr(exception,1,80)."...", "—")
+| table ts module message exc
+| rename ts as "Time", module as "Module", message as "Error", exc as "Exception"</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">10</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ╔═══════════════════════════════════════════════════════════════════════╗ -->
+  <!-- ║  SECTION 5: AI GUY                                                    ║ -->
+  <!-- ╚═══════════════════════════════════════════════════════════════════════╝ -->
+
+  <row><panel><html><h2 style="color:#a78bfa;margin:0;padding:4px 0">AI Guy (| aiguy)</h2></html></panel></row>
+
+  <row>
+    <panel>
+      <title>Total Calls</title>
+      <single>
+        <search>
+          <query>index=_internal sourcetype=splunkd "aiguy" "mode=" earliest=$time_range.earliest$ latest=$time_range.latest$
+| stats count</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Avg Duration (s)</title>
+      <single>
+        <search>
+          <query>index=_internal sourcetype=splunkd "aiguy" "mode=" "duration=" earliest=$time_range.earliest$ latest=$time_range.latest$
+| rex "duration=(?&lt;d&gt;\d+)ms"
+| stats avg(d) as a
+| eval a=round(a/1000,1)</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="unit">s</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Error Rate</title>
+      <single>
+        <search>
+          <query>index=_internal sourcetype=splunkd "aiguy" "mode=" earliest=$time_range.earliest$ latest=$time_range.latest$
+| rex "source=(?&lt;src&gt;\S+)"
+| eval is_err=if(src="error" OR src="config-error",1,0)
+| stats sum(is_err) as errors count as total
+| eval rate=if(total>0, round(errors/total*100,1), 0)</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="unit">%</option>
+        <option name="colorBy">value</option>
+        <option name="useColors">1</option>
+        <option name="rangeColors">["0x65a637","0xf58f39","0xd93f3c"]</option>
+        <option name="rangeValues">[5,20]</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Calls by Mode</title>
+      <chart>
+        <search>
+          <query>index=_internal sourcetype=splunkd "aiguy" "mode=" earliest=$time_range.earliest$ latest=$time_range.latest$
+| rex "mode=(?&lt;m&gt;\S+)"
+| stats count by m
+| sort - count
+| rename m as "Mode"</query>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Calls by Source (regex / dict / live / error)</title>
+      <chart>
+        <search>
+          <query>index=_internal sourcetype=splunkd "aiguy" "mode=" "source=" earliest=$time_range.earliest$ latest=$time_range.latest$
+| rex "source=(?&lt;src&gt;\S+)"
+| stats count by src
+| sort - count
+| rename src as "Source"</query>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.fieldColors">{"live":"#65a637","regex":"#60a5fa","dict":"#a78bfa","error":"#d93f3c","rate-limited":"#f58f39","config-error":"#f8be34"}</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Recent Calls</title>
+      <table>
+        <search>
+          <query>index=_internal sourcetype=splunkd "aiguy" "mode=" earliest=$time_range.earliest$ latest=$time_range.latest$
+| rex "mode=(?&lt;m&gt;\S+)\s+field=(?&lt;f&gt;\S+)\s+source=(?&lt;src&gt;\S+)\s+rows=(?&lt;r&gt;\d+)\s+duration=(?&lt;d&gt;\d+)ms\s+prompt=(?&lt;p&gt;.+)"
+| eval dur=round(d/1000,1)." s"
+| eval p=if(len(p)>60, substr(p,1,60)."...", p)
+| sort - _time
+| head 20
+| eval ts=strftime(_time,"%m/%d %H:%M:%S")
+| table ts m f p src r dur
+| rename ts as "Time", m as "Mode", f as "Field", p as "Prompt", src as "Source", r as "Rows", dur as "Duration"</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">10</option>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ╔═══════════════════════════════════════════════════════════════════════╗ -->
+  <!-- ║  SECTION 6: PIPELINE                                                 ║ -->
+  <!-- ╚═══════════════════════════════════════════════════════════════════════╝ -->
+
+  <row><panel><html><h2 style="color:#93C5FD;margin:0;padding:4px 0">Pipeline</h2></html></panel></row>
+
+  <row>
+    <panel>
+      <title>Scheduled Pipeline Stages</title>
+      <table>
+        <search>
+          <query>index=_internal source="*query_tester.log" module="scheduled_runner" earliest=$time_range.earliest$ latest=$time_range.latest$
+| eval stage=case(
+    like(message,"SHC stagger:%"),"1. Stagger delay",
+    like(message,"Missed run detected for test%"),"2. Missed run sweep",
+    like(message,"Enqueued test %") OR like(message,"%-run sweep enqueued%"),"3. Enqueued",
+    like(message,"Processing % queued test%"),"4. Processing",
+    like(message,"Skipping %"),"5. Skipped (dedup/SHC)",
+    like(message,"Running scheduled test %"),"6. Running",
+    like(message,"Scheduled test % completed:%"),"7. Completed",
+    like(message,"Resetting stale%"),"X. Stale reset",
+    log_level="ERROR","X. Error",
+    1=1,"—")
+| where stage!="—"
+| stats count as "Events" latest(_time) as last by stage
+| eval last=strftime(last,"%m/%d %H:%M:%S")
+| sort stage
+| rename last as "Last Seen"</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">12</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Manual Pipeline Stages</title>
+      <table>
+        <search>
+          <query>index=_internal source="*query_tester.log" (module="query_tester" OR module="core.test_runner" OR module="spl.query_executor" OR module="data.data_indexer" OR module="spl.query_injector") earliest=$time_range.earliest$ latest=$time_range.latest$
+| eval stage=case(
+    like(message,"Manual test run started by%"),"1. Started",
+    like(message,"Cache macro scan:%"),"2. SPL analysis",
+    like(message,"Indexed batch %"),"3. HEC indexing",
+    like(message,"Executed SPL in %"),"4. Query executed",
+    like(message,"Manual test run completed:%"),"5. Completed",
+    like(message,"Scenario % failed:%"),"X. Scenario error",
+    module="query_tester" AND log_level="ERROR","X. Handler error",
+    1=1,"—")
+| where stage!="—"
+| stats count as "Events" latest(_time) as last by stage
+| eval last=strftime(last,"%m/%d %H:%M:%S")
+| sort stage
+| rename last as "Last Seen"</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">10</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Run History</title>
+      <table>
+        <search>
+          <query>| inputlookup test_run_history_lookup
+| sort - ranAt
+| head 30
+| eval dur=round(durationMs/1000,1)." s"
+| eval drift=if(splDriftDetected="true" OR splDriftDetected="1","Yes","—")
+| eval ran=strftime(strptime(ranAt,"%Y-%m-%dT%H:%M:%SZ"),"%m/%d %H:%M")
+| table ran ranBy triggerType status dur drift resultSummary
+| rename ran as "Time", ranBy as "User", triggerType as "Trigger", status as "Status", dur as "Duration", drift as "Drift", resultSummary as "Summary"</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">15</option>
+      </table>
+    </panel>
+  </row>
+
+</dashboard>

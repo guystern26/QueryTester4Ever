@@ -1,0 +1,27 @@
+<form class="form-horizontal">
+    <div class="control-group">
+        <div class="controls">
+            <div style="padding:8px 12px;margin-bottom:12px;background:#fef3c7;border:1px solid #f59e0b;border-radius:4px;color:#92400e;font-size:13px">
+                <strong>&#9888; Minimum cron interval: 10 minutes.</strong><br/>
+                AI Summary will not fire on searches scheduled more frequently than every 10 minutes.
+                If the interval is too short, the action will be skipped and an error will be logged.
+            </div>
+        </div>
+    </div>
+    <div class="control-group">
+        <label class="control-label" for="recipients">Email Recipients</label>
+        <div class="controls">
+            <input type="text" name="action.ai_summary.param.recipients" id="recipients"
+                   placeholder="oncall@company.com, team@company.com" />
+            <span class="help-block">Comma-separated email addresses. Falls back to default alert email if empty.</span>
+        </div>
+    </div>
+    <div class="control-group">
+        <label class="control-label" for="prompt">Custom Prompt (optional)</label>
+        <div class="controls">
+            <textarea name="action.ai_summary.param.prompt" id="prompt" rows="3"
+                      placeholder="Leave empty for default AI summary. Or write a custom instruction for the AI."></textarea>
+            <span class="help-block">Override the default analysis prompt. The AI receives this + the search results.</span>
+        </div>
+    </div>
+</form>

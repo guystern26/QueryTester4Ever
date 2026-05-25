@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<view template="QueryTester:/templates/suites.html" type="html">
+	<label>Test Suites</label>
+</view>
